@@ -1,0 +1,25 @@
+# Ficheros de estado de Terraform
+*.tfstate
+*.tfstate.*
+
+# Ficheros de logs de crash
+crash.log
+crash.*.log
+
+# Ficheros generados por 'terraform init'
+.terraform/
+.terraform.lock.hcl
+
+# Ficheros de variables que no deben ser versionados
+*.tfvars
+*.tfvars.json
+
+# Ficheros de override
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Configuraciones de CLI
+.terraformrc
+terraform.rc
