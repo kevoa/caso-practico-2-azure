@@ -1,0 +1,14 @@
+# Fichero: ansible/playbook-acr-build-push.yml
+# Descripción: Playbook para construir las imágenes de las aplicaciones y subirlas al ACR.
+
+- name: Construir y Subir Imágenes al Azure Container Registry
+  hosts: local
+  gather_facts: no
+  vars:
+    acr_name: "acrkevinpracticaunir2" 
+    tag: "casopractico2"
+
+  tasks:
+    - name: Mensaje de inicio
+      ansible.builtin.debug:
+        msg: "Iniciando el proceso de construcción y subida de imágenes para el ACR {{ acr_name }}.azurecr.io"
