@@ -23,3 +23,14 @@ override.tf.json
 # Configuraciones de CLI
 .terraformrc
 terraform.rc
+
+# Entornos virtuales de Python
+.venv/
+
+# Ficheros compilados y caché de Python
+__pycache__/
+*.pyc
+
+# Ficheros temporales y de caché de Ansible
+.ansible/tmp/
+*.retry
