@@ -4,7 +4,7 @@
 # Grupo para la conexión local (nuestra máquina WSL)
 # Usaremos esta conexión para construir y subir las imágenes Docker/Podman.
 [local]
-localhost ansible_connection=local
+localhost ansible_connection=local ansible_python_interpreter=/home/kevinoa/caso-practico-2-azure/.venv/bin/python3
 
 # Grupo para la futura VM en Azure (lo usaremos más adelante)
 [vm_azure]
