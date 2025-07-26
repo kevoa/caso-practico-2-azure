@@ -5,10 +5,85 @@
   hosts: local
   gather_facts: no
   vars:
-    acr_name: "acrkevinpracticaunir2" 
+    acr_name: "acrkevinpracticaunir2"
+    resource_group: "rg-casopractico2-kevin"
     tag: "casopractico2"
+    nginx_dockerfile_path: "../dockerfiles/nginx-podman"
+    mongo_express_dockerfile_path: "../dockerfiles/mongo-express-aks"
+    podman_socket: "unix:///run/user/{{ lookup('pipe', 'id -u') }}/podman/podman.sock"
+    nginx_cert_path: "{{ nginx_dockerfile_path }}/server.crt"
+    nginx_key_path: "{{ nginx_dockerfile_path }}/server.key"
+    nginx_user: "kevin"
+    nginx_password: "password123" 
 
   tasks:
-    - name: Mensaje de inicio
-      ansible.builtin.debug:
-        msg: "Iniciando el proceso de construcción y subida de imágenes para el ACR {{ acr_name }}.azurecr.io"
+# NUEVAS TAREAS ROBUSTAS USANDO EL MÓDULO SHELL
+    - name: 1. Obtener un token de acceso para el ACR
+      ansible.builtin.shell:
+        cmd: "az acr login --name {{ acr_name }} --expose-token"
+      register: acr_token_raw
+
+    - name: 2. Extraer variables del token
+      ansible.builtin.set_fact:
+        acr_login_server: "{{ (acr_token_raw.stdout | from_json).loginServer }}"
+        acr_access_token: "{{ (acr_token_raw.stdout | from_json).accessToken }}"
+
+    - name: 3. Autenticarse en el ACR usando el token de acceso
+      containers.podman.podman_login:
+        registry: "{{ acr_login_server }}"
+        username: "00000000-0000-0000-0000-000000000000"
+        password: "{{ acr_access_token }}"
+    
+    - name: 4. Generar clave privada para el certificado autofirmado
+      community.crypto.openssl_privatekey:
+        path: "{{ nginx_key_path }}"
+
+    - name: 5. Generar certificado autofirmado (x.509)
+      community.crypto.x509_certificate:
+        path: "{{ nginx_cert_path }}"
+        privatekey_path: "{{ nginx_key_path }}"
+        provider: selfsigned
+
+    - name: 6. Crear fichero htpasswd con usuario y contraseña
+      community.general.htpasswd:
+        path: "{{ nginx_dockerfile_path }}/htpasswd"
+        name: "{{ nginx_user }}"
+        password: "{{ nginx_password }}"
+        state: present
+
+    - name: 7. Construir la imagen de Nginx para Podman
+      containers.podman.podman_image:
+        name: "nginx-podman-local"
+        tag: "{{ tag }}"
+        path: "{{ nginx_dockerfile_path }}"
+        state: present
+
+    - name: 8. Etiquetar (tag) la imagen de Nginx para el ACR
+      containers.podman.podman_tag:
+        image: "nginx-podman-local:{{ tag }}"
+        target_names:
+          - "{{ acr_login_server }}/nginx-podman:{{ tag }}"
+
+    - name: 9. Subir la imagen de Nginx al ACR
+      containers.podman.podman_image:
+        name: "{{ acr_login_server }}/nginx-podman:{{ tag }}"
+        push: true
+
+    - name: 10. Construir la imagen de Mongo Express para AKS
+      containers.podman.podman_image:
+        name: "mongo-express-aks-local"
+        tag: "{{ tag }}"
+        path: "{{ mongo_express_dockerfile_path }}"
+        state: present
+
+    - name: 11. Etiquetar (tag) la imagen de Mongo Express para el ACR
+      containers.podman.podman_tag:
+        image: "mongo-express-aks-local:{{ tag }}"
+        target_names:
+          - "{{ acr_login_server }}/mongo-express-aks:{{ tag }}"
+
+    - name: 12. Subir la imagen de Mongo Express al ACR
+      containers.podman.podman_image:
+        name: "{{ acr_login_server }}/mongo-express-aks:{{ tag }}"
+        push: true
+
