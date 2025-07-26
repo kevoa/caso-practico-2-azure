@@ -1,0 +1,41 @@
+# Fichero: ansible/playbook-aks-deploy.yml
+# Descripción: Despliega la aplicación MongoDB + Mongo Express en el clúster de AKS.
+
+- name: Desplegar Aplicación con Persistencia en AKS
+  hosts: local
+  gather_facts: no
+  vars:
+    resource_group: "rg-casopractico2-kevin"
+    aks_cluster_name: "aks-cluster-kevin"
+    # Ruta al fichero de manifiestos de Kubernetes
+    k8s_manifest_path: "../kubernetes/mongo-deployment.yml"
+
+  tasks:
+    - name: 1. Obtener credenciales de acceso al clúster de AKS
+      # Esta tarea ejecuta 'az aks get-credentials' para configurar nuestro kubeconfig local
+      # y poder comunicarnos con el clúster.
+      ansible.builtin.shell:
+        cmd: "az aks get-credentials --resource-group {{ resource_group }} --name {{ aks_cluster_name }} --overwrite-existing"
+      changed_when: false # Este comando no cambia el estado, solo configura el acceso
+
+    - name: 2. Aplicar los manifiestos de Kubernetes para desplegar la aplicación
+      # Este módulo lee nuestro fichero YAML y crea todos los recursos en el clúster.
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ k8s_manifest_path }}"
+
+    - name: 3. Esperar a que Azure asigne una IP pública al servicio
+      # Esta tarea es crucial. Pausa el playbook hasta que la IP esté disponible.
+      kubernetes.core.k8s_info:
+        kind: Service
+        name: mongo-express-service
+        namespace: default
+      register: service_info
+      until: service_info.resources[0].status.loadBalancer.ingress[0].ip is defined
+      retries: 30  # Intentarlo hasta 30 veces
+      delay: 10  # Esperar 10 segundos entre intentos (5 minutos en total)
+
+    - name: 4. Mostrar la IP pública de la aplicación
+      ansible.builtin.debug:
+        msg: "✅ ¡Despliegue completado! Accede a tu aplicación en: http://{{ service_info.resources[0].status.loadBalancer.ingress[0].ip }}"
+

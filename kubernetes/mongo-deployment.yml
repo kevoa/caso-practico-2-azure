@@ -2,27 +2,27 @@
 # Descripción: Define todos los recursos de Kubernetes para desplegar MongoDB y Mongo Express.
 
 # --- 1. El Secreto ---
-# Guarda las credenciales de la base de datos de forma segura.
 apiVersion: v1
 kind: Secret
 metadata:
   name: mongodb-secret
+  namespace: default
 type: Opaque
 stringData:
   mongo-root-username: "mongoadmin"
-  mongo-root-password: "password123" # En un entorno real podriamos usar un gestor de secretos.
+  mongo-root-password: "password123"
 
 ---
 # --- 2. El Almacenamiento Persistente ---
-# Solicita 1 GiB de almacenamiento a Azure para guardar los datos de MongoDB.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: mongodb-pvc
+  namespace: default
 spec:
   accessModes:
-    - ReadWriteOnce # El disco solo puede ser montado por un pod a la vez.
-  storageClassName: "default" # Usamos la clase de almacenamiento por defecto de AKS (Azure Disk).
+    - ReadWriteOnce
+  storageClassName: "default"
   resources:
     requests:
       storage: 1Gi
@@ -33,6 +33,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mongodb-deployment
+  namespace: default
 spec:
   replicas: 1
   selector:
@@ -69,11 +70,11 @@ spec:
 
 ---
 # --- 4. El Servicio Interno para la Base de Datos ---
-# Crea una "dirección" interna para que Mongo Express pueda encontrar a MongoDB.
 apiVersion: v1
 kind: Service
 metadata:
-  name: mongodb-service
+  name: mongo # <-- C A M B I O A Q U Í
+  namespace: default
 spec:
   selector:
     app: mongodb
@@ -88,6 +89,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mongo-express-deployment
+  namespace: default
 spec:
   replicas: 1
   selector:
@@ -98,39 +100,45 @@ spec:
       labels:
         app: mongo-express
     spec:
+      initContainers:
+      - name: wait-for-mongodb
+        image: docker.io/busybox:1.36
+        # CORRECCIÓN DEFINITIVA: Usamos 'nc' para comprobar si el puerto de MongoDB está abierto.
+        # Este comando es mucho más fiable que 'nslookup'.
+        command: ['sh', '-c', 'until nc -vz mongo 27017; do echo "Esperando a que el puerto de MongoDB esté disponible..."; sleep 2; done'] # <-- Y A Q U Í
       containers:
         - name: mongo-express
-          # Usamos la imagen que subimos a nuestro ACR
           image: acrkevinpracticaunir2.azurecr.io/mongo-express-aks:casopractico2
           ports:
             - containerPort: 8081
           env:
             - name: ME_CONFIG_MONGODB_SERVER
-              value: mongodb-service # Apunta al servicio interno de MongoDB
-            - name: ME_CONFIG_MONGODB_ADMINUSERNAME
+              value: mongo # <-- Y A Q U Í
+            - name: ME_CONFIG_MONGODB_AUTH_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: mongodb-secret
                   key: mongo-root-username
-            - name: ME_CONFIG_MONGODB_ADMINPASSWORD
+            - name: ME_CONFIG_MONGODB_AUTH_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: mongodb-secret
                   key: mongo-root-password
+            - name: ME_CONFIG_MONGODB_AUTH_DATABASE
+              value: admin
 
 ---
 # --- 6. El Servicio Externo para la Interfaz Web ---
-# Expone Mongo Express a Internet a través de una IP pública.
 apiVersion: v1
 kind: Service
 metadata:
   name: mongo-express-service
+  namespace: default
 spec:
   selector:
     app: mongo-express
-  type: LoadBalancer # Le pide a Azure que cree un Balanceador de Carga y una IP pública.
+  type: LoadBalancer
   ports:
     - protocol: TCP
-      port: 80 # El puerto público
-      targetPort: 8081 # El puerto del contenedor
-
+      port: 80
+      targetPort: 8081

@@ -2,8 +2,6 @@
 
 # Fichero: deploy.sh
 # Descripción: Orquestador principal para ejecutar los playbooks de Ansible.
-# Activa el entorno virtual y lanza el playbook especificado.
-# Uso: ./deploy.sh [acr|vm|aks]
 
 # --- Salir inmediatamente si un comando falla ---
 set -e
@@ -46,8 +44,7 @@ case "$TARGET" in
         ansible-playbook -i ansible/inventory/hosts ansible/playbook-vm-config.yml
         ;;
     aks)
-        echo "Playbook para AKS aún no implementado."
-        # ansible-playbook -i ansible/inventory/hosts ansible/playbook-aks-config.yml
+        ansible-playbook -i ansible/inventory/hosts ansible/playbook-aks-deploy.yml
         ;;
     *)
         echo "ERROR: Argumento no válido. Usa 'acr', 'vm' o 'aks'."
@@ -62,4 +59,3 @@ deactivate
 
 echo ""
 echo "🚀 ¡Proceso '${TARGET}' completado!"
-
