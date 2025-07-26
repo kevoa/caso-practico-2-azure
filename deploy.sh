@@ -1,34 +1,65 @@
 #!/bin/bash
-# Fichero: deploy.sh
 
+# Fichero: deploy.sh
+# Descripción: Orquestador principal para ejecutar los playbooks de Ansible.
+# Activa el entorno virtual y lanza el playbook especificado.
+# Uso: ./deploy.sh [acr|vm|aks]
+
+# --- Salir inmediatamente si un comando falla ---
 set -e
 
-VENV_DIR=".venv"
-PLAYBOOK_TO_RUN="ansible/playbook-acr-build-push.yml"
+# --- 1. Validar que se ha pasado un argumento ---
+if [ -z "$1" ]; then
+    echo "ERROR: Debes especificar qué parte desplegar."
+    echo "Uso: $0 [acr|vm|aks]"
+    exit 1
+fi
 
+VENV_DIR=".venv"
+TARGET=$1
+
+# --- 2. Comprobar si el entorno virtual existe ---
 if [ ! -d "$VENV_DIR" ]; then
     echo "ERROR: El entorno virtual no existe. Por favor, ejecuta './setup.sh' primero."
     exit 1
 fi
 
-echo "--- 1. Activando el entorno virtual de Python ---"
+echo "--- 3. Activando el entorno virtual de Python ---"
+# Usamos '.' en lugar de 'source' para máxima compatibilidad
 . ${VENV_DIR}/bin/activate
 
-# --- AÑADIR ESTE BLOQUE DE EXPORTACIÓN CON TUS CREDENCIALES ---
-echo "--- 2. Configurando credenciales del Service Principal ---"
-export AZURE_CLIENT_ID='el-appId-que-copiaste'
-export AZURE_SECRET='el-password-que-copiaste'
-export AZURE_TENANT='el-tenant-que-copiaste'
-export AZURE_SUBSCRIPTION_ID='tu-subscription-id'
-# --- FIN DEL BLOQUE AÑADIDO ---
+echo ""
+echo "--- 4. Autenticándose en Azure (si es necesario)... ---"
+# Verificamos si ya hay una sesión activa, si no, pedimos login.
+# Redirigimos la salida a /dev/null para que no muestre nada si tiene éxito.
+az account show > /dev/null 2>&1 || az login --use-device-code
 
 echo ""
-echo "--- 3. Ejecutando el playbook '${PLAYBOOK_TO_RUN}' ---"
-ansible-playbook -i ansible/inventory/hosts ${PLAYBOOK_TO_RUN}
+echo "--- 5. Ejecutando el playbook para '${TARGET}' ---"
+
+# --- Decidir qué playbook ejecutar basándose en el argumento ---
+case "$TARGET" in
+    acr)
+        ansible-playbook -i ansible/inventory/hosts ansible/playbook-acr-build-push.yml
+        ;;
+    vm)
+        ansible-playbook -i ansible/inventory/hosts ansible/playbook-vm-config.yml
+        ;;
+    aks)
+        echo "Playbook para AKS aún no implementado."
+        # ansible-playbook -i ansible/inventory/hosts ansible/playbook-aks-config.yml
+        ;;
+    *)
+        echo "ERROR: Argumento no válido. Usa 'acr', 'vm' o 'aks'."
+        deactivate
+        exit 1
+        ;;
+esac
 
 echo ""
-echo "--- 4. Desactivando el entorno virtual ---"
+echo "--- 6. Desactivando el entorno virtual ---"
 deactivate
 
 echo ""
-echo "🚀 ¡Proceso completado!"
+echo "🚀 ¡Proceso '${TARGET}' completado!"
+

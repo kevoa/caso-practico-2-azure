@@ -8,5 +8,5 @@ localhost ansible_connection=local ansible_python_interpreter=/home/kevinoa/caso
 
 # Grupo para la futura VM en Azure (lo usaremos más adelante)
 [vm_azure]
-# Se hará más adelante
+68.221.201.115 ansible_user=azureuser ansible_ssh_private_key_file=~/.ssh/id_rsa_azure ansible_ssh_common_args='-o StrictHostKeyChecking=no'
 

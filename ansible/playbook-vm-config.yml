@@ -1,0 +1,78 @@
+# Fichero: ansible/playbook-vm-config.yml
+# Descripción: Configura la VM en Azure, instala Podman y despliega el contenedor Nginx.
+
+- name: Configurar VM en Azure y Desplegar Servidor Web Nginx
+  hosts: vm_azure
+  become: yes # Necesitamos privilegios de administrador (sudo) para instalar software
+  vars:
+    acr_name: "acrkevinpracticaunir2"
+    tag: "casopractico2"
+    nginx_image_name: "{{ acr_name }}.azurecr.io/nginx-podman:{{ tag }}"
+
+  tasks:
+    - name: 1. Verificar la conexión con la VM
+      ansible.builtin.ping:
+
+    - name: 2. Actualizar la caché de paquetes (apt update)
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: 3. Instalar Podman
+      ansible.builtin.apt:
+        name: podman
+        state: present
+
+    - name: 4. Obtener un token de acceso para el ACR
+      delegate_to: localhost
+      become: no
+      ansible.builtin.shell:
+        cmd: "az acr login --name {{ acr_name }} --expose-token"
+      register: acr_token_raw
+
+    - name: 5. Extraer variables del token
+      delegate_to: localhost
+      become: no
+      ansible.builtin.set_fact:
+        acr_login_server: "{{ (acr_token_raw.stdout | from_json).loginServer }}"
+        acr_access_token: "{{ (acr_token_raw.stdout | from_json).accessToken }}"
+
+    - name: 6. Autenticarse en el ACR desde la VM usando el token
+      containers.podman.podman_login:
+        registry: "{{ acr_login_server }}"
+        username: "00000000-0000-0000-0000-000000000000" # Username fijo para login con token
+        password: "{{ acr_access_token }}"
+      no_log: true
+
+    - name: 7. Descargar (pull) la imagen de Nginx desde el ACR
+      containers.podman.podman_image:
+        name: "{{ nginx_image_name }}"
+
+    - name: 8. Asegurarse de que cualquier contenedor antiguo está detenido y eliminado
+      containers.podman.podman_container:
+        name: nginx_webserver
+        state: absent
+
+    - name: 9. Ejecutar el contenedor Nginx
+      containers.podman.podman_container:
+        name: nginx_webserver
+        image: "{{ nginx_image_name }}"
+        state: started
+        ports:
+          - "80:80"
+          - "443:443"
+        restart_policy: always
+
+    - name: 10. Generar un servicio de systemd para el contenedor
+      containers.podman.podman_generate_systemd:
+        name: nginx_webserver
+        dest: /etc/systemd/system/
+        new: true
+
+    - name: 11. Recargar el demonio de systemd y habilitar el nuevo servicio
+      ansible.builtin.systemd:
+        name: container-nginx_webserver.service
+        enabled: yes
+        daemon_reload: yes
+        state: started
+

@@ -1,0 +1,136 @@
+# Fichero: kubernetes/mongo-deployment.yml
+# Descripción: Define todos los recursos de Kubernetes para desplegar MongoDB y Mongo Express.
+
+# --- 1. El Secreto ---
+# Guarda las credenciales de la base de datos de forma segura.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-secret
+type: Opaque
+stringData:
+  mongo-root-username: "mongoadmin"
+  mongo-root-password: "password123" # En un entorno real podriamos usar un gestor de secretos.
+
+---
+# --- 2. El Almacenamiento Persistente ---
+# Solicita 1 GiB de almacenamiento a Azure para guardar los datos de MongoDB.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce # El disco solo puede ser montado por un pod a la vez.
+  storageClassName: "default" # Usamos la clase de almacenamiento por defecto de AKS (Azure Disk).
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# --- 3. El Despliegue de la Base de Datos (MongoDB) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: docker.io/mongo:latest
+          ports:
+            - containerPort: 27017
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: mongo-root-username
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: mongo-root-password
+          volumeMounts:
+            - name: mongodb-persistent-storage
+              mountPath: /data/db
+      volumes:
+        - name: mongodb-persistent-storage
+          persistentVolumeClaim:
+            claimName: mongodb-pvc
+
+---
+# --- 4. El Servicio Interno para la Base de Datos ---
+# Crea una "dirección" interna para que Mongo Express pueda encontrar a MongoDB.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-service
+spec:
+  selector:
+    app: mongodb
+  ports:
+    - protocol: TCP
+      port: 27017
+      targetPort: 27017
+
+---
+# --- 5. El Despliegue de la Interfaz Web (Mongo Express) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo-express-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo-express
+  template:
+    metadata:
+      labels:
+        app: mongo-express
+    spec:
+      containers:
+        - name: mongo-express
+          # Usamos la imagen que subimos a nuestro ACR
+          image: acrkevinpracticaunir2.azurecr.io/mongo-express-aks:casopractico2
+          ports:
+            - containerPort: 8081
+          env:
+            - name: ME_CONFIG_MONGODB_SERVER
+              value: mongodb-service # Apunta al servicio interno de MongoDB
+            - name: ME_CONFIG_MONGODB_ADMINUSERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: mongo-root-username
+            - name: ME_CONFIG_MONGODB_ADMINPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: mongo-root-password
+
+---
+# --- 6. El Servicio Externo para la Interfaz Web ---
+# Expone Mongo Express a Internet a través de una IP pública.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo-express-service
+spec:
+  selector:
+    app: mongo-express
+  type: LoadBalancer # Le pide a Azure que cree un Balanceador de Carga y una IP pública.
+  ports:
+    - protocol: TCP
+      port: 80 # El puerto público
+      targetPort: 8081 # El puerto del contenedor
+
