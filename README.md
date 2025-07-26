@@ -225,7 +225,7 @@ terraform destroy --auto-approve
         
 - **Problemas con `initContainer` de Mongo Express:** Si el pod de Mongo Express se queda en `Init:0/1`, verifica los logs del `initContainer` (`kubectl logs <pod-name> -c wait-for-mongodb`) y del contenedor principal (`kubectl logs <pod-name> -c mongo-express`). Asegúrate de que el servicio de MongoDB se llame `mongo` y que la variable `ME_CONFIG_MONGODB_SERVER` apunte a `mongo`.
     
-- **Archivos `.terraform/` y `.terraform.tfstate`:** Estos directorios y archivos **nunca deben subirse a Git**. El `.gitignore` en la raíz del proyecto está configurado para ignorarlos, pero si ya los subiste accidentalmente, necesitarás limpiar tu historial de Git (ver sección "ERROR GRAVE!" en tu documentación interna).
+- **Archivos `.terraform/` y `.terraform.tfstate`:** Estos directorios y archivos **nunca deben subirse a Git**. El `.gitignore` en la raíz del proyecto está configurado para ignorarlos, pero si ya los subiste accidentalmente, necesitarás limpiar tu historial de Git.
     
 
 ¡Disfruta de tu despliegue automatizado!
