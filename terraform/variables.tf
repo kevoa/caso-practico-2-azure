@@ -40,5 +40,5 @@ variable "admin_username" {
 variable "admin_ssh_key_public" {
   description = "Clave pública SSH para acceder a la VM y a los nodos de AKS."
   type        = string
-  default     = "~/.ssh/id_ed25519.pub"
+  default     = "~/.ssh/id_rsa_azure.pub"
 }
